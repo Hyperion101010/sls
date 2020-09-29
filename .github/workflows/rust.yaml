@@ -6,8 +6,7 @@ name: Rust
 jobs:
   build:
     name: Build and format
-    runs-on: ubuntu-latest
-    container: hyperledgerlabs/solang:ci
+    runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
