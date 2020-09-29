@@ -15,9 +15,7 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
-      - name: Install llvm
       - run: sudo apt install curl llvm-10-dev clang-10
-      - name: Build cargo
       - run: cargo build
         working-directory: solang-server
       - run: cargo clippy
