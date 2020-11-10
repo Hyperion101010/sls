@@ -235,6 +235,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "245097e9a4535ee1e3e3931fcfcd55a796a44c643e8596ff6566d68f09b87bbc"
 
 [[package]]
+name = "contract-metadata"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "319da22c0c9231eecbef64c54be3fe6deb3bf114ceb8e0ee607595af2ce6900d"
+dependencies = [
+ "semver 0.10.0",
+ "serde",
+ "serde_json",
+ "url",
+]
+
+[[package]]
 name = "crossbeam-utils"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -639,7 +651,7 @@ dependencies = [
  "lazy_static",
  "libc",
  "regex",
- "semver",
+ "semver 0.9.0",
 ]
 
 [[package]]
@@ -1088,6 +1100,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "26412eb97c6b088a6997e05f69403a802a92d520de2f8e63c2b65f9e0f47c4e8"
 
 [[package]]
+name = "remove_dir_all"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3acd125665422973a33ac9d3dd2df85edad0f4ae9b00dafb1a05e43a9f5ef8e7"
+dependencies = [
+ "winapi",
+]
+
+[[package]]
 name = "rust-argon2"
 version = "0.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1118,6 +1139,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d7eb9ef2c18661902cc47e535f9bc51b78acd254da71d375c2f6720d9a40403"
 dependencies = [
  "semver-parser",
+]
+
+[[package]]
+name = "semver"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "394cec28fa623e00903caf7ba4fa6fb9a0e260280bb8cdbbba029611108a0190"
+dependencies = [
+ "semver-parser",
+ "serde",
 ]
 
 [[package]]
@@ -1213,10 +1244,11 @@ checksum = "fbee7696b84bbf3d89a1c2eccff0850e3047ed46bfcd2e92c29a2d074d57e252"
 [[package]]
 name = "solang"
 version = "0.1.4"
-source = "git+https://github.com/hyperledger-labs/solang#19f2c08d7adf0e9367745751b76590703af44993"
+source = "git+https://github.com/hyperledger-labs/solang.git?rev=91290e6c3a667f4abe473d516c0f1910888085ce#91290e6c3a667f4abe473d516c0f1910888085ce"
 dependencies = [
  "blake2-rfc",
  "clap",
+ "contract-metadata",
  "handlebars",
  "hex",
  "inkwell",
@@ -1229,9 +1261,11 @@ dependencies = [
  "parity-wasm",
  "phf",
  "regex",
+ "semver 0.10.0",
  "serde",
  "serde_derive",
  "serde_json",
+ "tempfile",
  "tiny-keccak",
  "unicode-xid",
 ]
@@ -1294,6 +1328,20 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-xid",
+]
+
+[[package]]
+name = "tempfile"
+version = "3.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a6e24d9338a0a5be79593e2fa15a648add6138caa803e2d5bc782c371732ca9"
+dependencies = [
+ "cfg-if",
+ "libc",
+ "rand",
+ "redox_syscall",
+ "remove_dir_all",
+ "winapi",
 ]
 
 [[package]]
