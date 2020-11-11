@@ -19,6 +19,6 @@ jobs:
     - name: Npm install
       run: npm install
     - name: Run tests
-      uses: GabrielBB/xvfb-action@v1
+      uses: GabrielBB/xvfb-action@v1.4
       with:
         run: npm test
