@@ -16,7 +16,16 @@ jobs:
       uses: actions/setup-node@v1
       with:
         node-version: ${{ matrix.node-version }}
+    - name: Install latest Rust stable toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+          toolchain: stable
+          profile: minimal
     - name: Npm install
       run: npm install
     - name: Compile
       run: npm run compile
+    - run: xvfb-run -a npm test
+      if: runner.os == 'Linux'
+    - run: npm test
+      if: runner.os != 'Linux'
