@@ -1,15 +1,13 @@
-//use jsonrpc_core::Result;
+use jsonrpc_core::Result;
 use serde_json::Value;
 use tower_lsp::lsp_types::*;
-use tower_lsp::lsp_types::{ Diagnostic, DiagnosticSeverity, Position, Range};
 use tower_lsp::{Client, LanguageServer};
-use tower_lsp::jsonrpc::Result;
 
 use solang::file_cache::FileCache;
 use solang::parse_and_resolve;
 use solang::Target;
 
-//use lsp_types::{DiagnosticSeverity, Position, Range};
+use lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range};
 use solang::sema::*;
 
 use std::collections::HashMap;
@@ -27,19 +25,12 @@ use solang::sema::tags::*;
 
 use solang::sema::builtin::get_prototype;
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Backend {
-    client: Client,
-    //state: Vec<usize>,
+    state: Vec<usize>,
 }
 
 impl Backend {
-    pub fn new(client: Client) -> Self {
-        Self {
-            client,
-        }
-    }
-
     // Calculate the line and coloumn from the Loc offset recieved from the parser
     // Do a linear search till the correct offset location is matched
     fn file_offset_to_line_column(data: &str, loc: usize) -> (usize, usize) {
@@ -651,7 +642,6 @@ impl Backend {
 
                 param_msg = format!("{})", param_msg);
                 lookup_tbl.push((loc.1 as u64, loc.2 as u64, param_msg));
-
             }
             ExternalFunctionCall {
                 loc,
@@ -890,7 +880,7 @@ impl Backend {
         ns: &ast::Namespace,
         _fnc_map: &HashMap<String, String>,
     ) -> String {
-        let def;
+        let def;// = "[Def]".to_string();
 
         match typ {
             sema::ast::Type::Ref(r) => {
@@ -934,6 +924,7 @@ impl Backend {
                 }
     
                 evnt_msg = format!("{} \n\n`}}`", evnt_msg);
+                
                 def = evnt_msg;
             }
             sema::ast::Type::Enum(n) => {
@@ -985,17 +976,20 @@ impl Backend {
     ) -> String {
         //let mut res = format!("[Hover]");
         let mut res = format!(
-            "Either the code is incorrect or Feature not yet implemented for {} offset \n\n",
-            offset
+            "[Hover]\n\n",
         );
  
         let mut _ind = 0;
         let mut _found = false;
 
         lookup_tbl.sort_by_key(|k| k.0);
-        lookup_tbl.reverse();
 
         for x in 0..lookup_tbl.len() {
+            /*if lookup_tbl[x].0 == 0 {
+                _ind += 1;
+                continue;
+            }
+            */
             if lookup_tbl[x].0 <= *offset && *offset <= lookup_tbl[x].1 {
                 res = lookup_tbl[_ind].2.to_string();                
                 break;
@@ -1050,14 +1044,14 @@ impl Backend {
 
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
-    async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
+    async fn initialize(&self, _: &Client, _: InitializeParams) -> Result<InitializeResult> {
         Ok(InitializeResult {
             server_info: None,
             capabilities: ServerCapabilities {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
-                    TextDocumentSyncKind::Full,
+                    TextDocumentSyncKind::Incremental,
                 )),
-                hover_provider: Some(HoverProviderCapability::Simple(true)),
+                hover_provider: Some(true),
                 completion_provider: Some(CompletionOptions {
                     resolve_provider: Some(false),
                     trigger_characters: Some(vec![".".to_string()]),
@@ -1069,8 +1063,6 @@ impl LanguageServer for Backend {
                     work_done_progress_options: Default::default(),
                 }),
                 document_highlight_provider: None,
-                selection_range_provider: None,
-                folding_range_provider: None,
                 workspace_symbol_provider: Some(true),
                 execute_command_provider: Some(ExecuteCommandOptions {
                     commands: vec!["dummy.do_something".to_string()],
@@ -1089,8 +1081,8 @@ impl LanguageServer for Backend {
         })
     }
 
-    async fn initialized(&self, _: InitializedParams) {
-        self.client.log_message(MessageType::Info, "server initialized!").await;
+    async fn initialized(&self, client: &Client, _: InitializedParams) {
+        client.log_message(MessageType::Info, "server initialized!");
     }
 
     async fn shutdown(&self) -> Result<()> {
@@ -1099,29 +1091,31 @@ impl LanguageServer for Backend {
 
     async fn did_change_workspace_folders(
         &self,
+        client: &Client,
         _: DidChangeWorkspaceFoldersParams,
     ) {
-        self.client.log_message(MessageType::Info, "workspace folders changed!").await;
+        client.log_message(MessageType::Info, "workspace folders changed!");
     }
 
-    async fn did_change_configuration(&self, _: DidChangeConfigurationParams) {
-        self.client.log_message(MessageType::Info, "configuration changed!").await;
+    async fn did_change_configuration(&self, client: &Client, _: DidChangeConfigurationParams) {
+        client.log_message(MessageType::Info, "configuration changed!");
     }
 
-    async fn did_change_watched_files(&self, _: DidChangeWatchedFilesParams) {
-        self.client.log_message(MessageType::Info, "watched files have changed!").await;
+    async fn did_change_watched_files(&self, client: &Client, _: DidChangeWatchedFilesParams) {
+        client.log_message(MessageType::Info, "watched files have changed!");
     }
 
     async fn execute_command(
         &self,
+        client: &Client,
         _: ExecuteCommandParams,
     ) -> Result<Option<Value>> {
-        self.client.log_message(MessageType::Info, "command executed!").await;
+        client.log_message(MessageType::Info, "command executed!");
         Ok(None)
     }
 
-    async fn did_open(&self, params: DidOpenTextDocumentParams) {
-        //self.client.log_message(MessageType::Info, "file opened!").await;
+    async fn did_open(&self, client: &Client, params: DidOpenTextDocumentParams) {
+        client.log_message(MessageType::Info, "file opened!");
 
         let uri = params.text_document.uri;
 
@@ -1138,22 +1132,22 @@ impl LanguageServer for Backend {
 
             filecache.add_import_path(p);
 
-            let _uri_string = uri.to_string();
+            let uri_string = uri.to_string();
 
-            //self.client.log_message(MessageType::Info, &uri_string);
+            client.log_message(MessageType::Info, &uri_string);
 
             let os_str = path.file_name().unwrap();
 
             let ns = parse_and_resolve(os_str.to_str().unwrap(), &mut filecache, Target::Ewasm);
 
-            let _d = Backend::convert_to_diagnostics(ns, &mut filecache);
+            let d = Backend::convert_to_diagnostics(ns, &mut filecache);
 
-            //self.client.publish_diagnostics(uri, d, None).await;
+            client.publish_diagnostics(uri, d, None);
         }
     }
 
-    async fn did_change(&self, params: DidChangeTextDocumentParams) {
-        //self.client.log_message(MessageType::Info, "file changed!");
+    async fn did_change(&self, client: &Client, params: DidChangeTextDocumentParams) {
+        client.log_message(MessageType::Info, "file changed!");
 
         let uri = params.text_document.uri;
 
@@ -1170,22 +1164,22 @@ impl LanguageServer for Backend {
 
             filecache.add_import_path(p);
 
-            //let uri_string = uri.to_string();
+            let uri_string = uri.to_string();
 
-            //self.client.log_message(MessageType::Info, &uri_string);
+            client.log_message(MessageType::Info, &uri_string);
 
             let os_str = path.file_name().unwrap();
 
             let ns = parse_and_resolve(os_str.to_str().unwrap(), &mut filecache, Target::Ewasm);
 
-            let _d = Backend::convert_to_diagnostics(ns, &mut filecache);
+            let d = Backend::convert_to_diagnostics(ns, &mut filecache);
 
-            //self.client.publish_diagnostics(uri, d, None);
+            client.publish_diagnostics(uri, d, None);
         }
     }
 
-    async fn did_save(&self, params: DidSaveTextDocumentParams) {
-        //self.client.log_message(MessageType::Info, "file saved!");
+    async fn did_save(&self, client: &Client, params: DidSaveTextDocumentParams) {
+        client.log_message(MessageType::Info, "file saved!");
 
         let uri = params.text_document.uri;
 
@@ -1202,22 +1196,22 @@ impl LanguageServer for Backend {
 
             filecache.add_import_path(p);
 
-            let _uri_string = uri.to_string();
+            let uri_string = uri.to_string();
 
-            //self.client.log_message(MessageType::Info, &uri_string);
+            client.log_message(MessageType::Info, &uri_string);
 
             let os_str = path.file_name().unwrap();
 
             let ns = parse_and_resolve(os_str.to_str().unwrap(), &mut filecache, Target::Ewasm);
 
-            let _d = Backend::convert_to_diagnostics(ns, &mut filecache);
+            let d = Backend::convert_to_diagnostics(ns, &mut filecache);
 
-            //self.client.publish_diagnostics(uri, d, None);
+            client.publish_diagnostics(uri, d, None);
         }
     }
 
-    async fn did_close(&self, _: DidCloseTextDocumentParams) {
-        self.client.log_message(MessageType::Info, "file closed!").await;
+    async fn did_close(&self, client: &Client, _: DidCloseTextDocumentParams) {
+        client.log_message(MessageType::Info, "file closed!");
     }
 
     async fn completion(&self, _: CompletionParams) -> Result<Option<CompletionResponse>> {

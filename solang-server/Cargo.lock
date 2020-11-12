@@ -80,18 +80,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "auto_impl"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "42cbf586c80ada5e5ccdecae80d3ef0854f224e2dd74435f8d87e6831b8d0a38"
-dependencies = [
- "proc-macro-error",
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
 name = "autocfg"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -527,15 +515,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d7afe4a420e3fe79967a00898cc1f4db7c8a49a9333a29f8a4bd76a253d5cd04"
 
 [[package]]
-name = "heck"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20564e78d53d2bb135c343b3f47714a56af2061f1c928fdb541dc7b9fdd94205"
-dependencies = [
- "unicode-segmentation",
-]
-
-[[package]]
 name = "hermit-abi"
 version = "0.1.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -725,20 +704,6 @@ name = "lsp-types"
 version = "0.74.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b360754e89e0e13c114245131382ba921d4ff1efabb918e549422938aaa8d392"
-dependencies = [
- "base64",
- "bitflags",
- "serde",
- "serde_json",
- "serde_repr",
- "url",
-]
-
-[[package]]
-name = "lsp-types"
-version = "0.81.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e02724627e9ef8ba91f461ebc01d48aebbd13a4b7c9dc547a0a2890f53e2171"
 dependencies = [
  "base64",
  "bitflags",
@@ -1060,30 +1025,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "proc-macro-error"
-version = "1.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da25490ff9892aab3fcf7c36f08cfb902dd3e71ca0f9f9517bea02a73a5ce38c"
-dependencies = [
- "proc-macro-error-attr",
- "proc-macro2",
- "quote",
- "syn",
- "version_check",
-]
-
-[[package]]
-name = "proc-macro-error-attr"
-version = "1.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1be40180e52ecc98ad80b184934baf3d0d29f979574e439af5a55274b35f869"
-dependencies = [
- "proc-macro2",
- "quote",
- "version_check",
-]
-
-[[package]]
 name = "proc-macro-hack"
 version = "0.5.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1387,7 +1328,7 @@ dependencies = [
  "jsonrpc-core",
  "jsonrpc-derive",
  "log",
- "lsp-types 0.74.2",
+ "lsp-types",
  "nom",
  "serde",
  "serde_json",
@@ -1570,36 +1511,24 @@ checksum = "a35d656f2638b288b33495d1053ea74c40dc05ec0b92084dd71ca5566c4ed1dc"
 
 [[package]]
 name = "tower-lsp"
-version = "0.13.3"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a75aeada84f07dfc4e81bc58a36a12b22c01c418af2180587cf80f9f3228acad"
+checksum = "ec8a96bbd107e83d4558bcd881fd8fc8eda7dbbd3ad2f013829be4aa7948d8f0"
 dependencies = [
  "async-trait",
- "auto_impl",
  "bytes",
  "dashmap",
  "futures 0.3.8",
+ "jsonrpc-core",
+ "jsonrpc-derive",
  "log",
- "lsp-types 0.81.0",
+ "lsp-types",
  "nom",
  "serde",
  "serde_json",
  "tokio",
  "tokio-util",
- "tower-lsp-macros",
  "tower-service",
-]
-
-[[package]]
-name = "tower-lsp-macros"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c51c24e3b5909be30d6ed472f934aa9b7d91abf2688013956b296b1d1e7b186"
-dependencies = [
- "heck",
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]
@@ -1651,12 +1580,6 @@ checksum = "b7f98e67a4d84f730d343392f9bfff7d21e3fca562b9cb7a43b768350beeddc6"
 dependencies = [
  "tinyvec",
 ]
-
-[[package]]
-name = "unicode-segmentation"
-version = "1.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e83e153d1053cbb5a118eeff7fd5be06ed99153f00dbcd8ae310c5fb2b22edc0"
 
 [[package]]
 name = "unicode-width"
