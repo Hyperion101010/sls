@@ -21,6 +21,78 @@ import { LanguageClient,
 import { workspace, 
 	WorkspaceFolder 
 } from 'vscode';
+import { homedir } from 'os';
+import { config } from 'process';
+
+let client: LanguageClient;
+
+function expandPathResolving(path: string) {
+	if (path.startsWith('~/')) {
+		return path.replace('~', homedir());
+	}
+	return path;
+}
+
+function startslsclient(language: string, path: string, serverCommand: string) {
+	let commandArgs: string[];
+
+	let commandOptions: ExecutableOptions = { stdio:'pipe', detached: false }
+
+	let serverOptions: ServerOptions = {
+		run: <Executable> { command: serverCommand/*,args: commandArgs*/, options: commandOptions},
+		debug: <Executable> {command: serverCommand/*,args: commandArgs*/, options: commandOptions}
+	}
+
+	let clientoptions: LanguageClientOptions = {
+		documentSelector: [{ language: 'solidity', scheme: 'file' }, { language: 'solidity', scheme: 'untitled' }],
+		synchronize: {
+			fileEvents: workspace.createFileSystemWatcher('**/clientrc')
+		}
+	}
+
+	client = new LanguageClient(
+		'solidity',
+		'Soliditiy language server extension',
+		serverOptions,
+		clientoptions
+	);
+
+	client.registerProposedFeatures();
+
+	client.start();
+}
+
+export function activate(context: vscode.ExtensionContext) {
+	let serverCommand = expandPathResolving('~/intern/hyperledger/sls/practice/slang-ex/solang-server/target/debug/solang-server');
+	//let serverCommand = expandPathResolving('target/debug/solang-server');
+	
+	let modulePath = '';
+	
+	startslsclient('solidity',modulePath,serverCommand);
+}
+
+export function deactivate(): Thenable<void> {
+	/*if(!client){
+		return undefined;
+	}*/
+	return client.stop();
+}
+
+/*
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 let diagcollect: vscode.DiagnosticCollection;
@@ -124,3 +196,4 @@ export function activate(context: vscode.ExtensionContext) {
 
 // this method is called when your extension is deactivated
 export function deactivate() { }
+*/

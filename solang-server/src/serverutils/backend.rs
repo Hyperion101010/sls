@@ -1,13 +1,15 @@
-use jsonrpc_core::Result;
+//use jsonrpc_core::Result;
 use serde_json::Value;
 use tower_lsp::lsp_types::*;
+use tower_lsp::lsp_types::{ Diagnostic, DiagnosticSeverity, Position, Range};
 use tower_lsp::{Client, LanguageServer};
+use tower_lsp::jsonrpc::Result;
 
 use solang::file_cache::FileCache;
 use solang::parse_and_resolve;
 use solang::Target;
 
-use lsp_types::{Diagnostic, DiagnosticSeverity, Position, Range};
+//use lsp_types::{DiagnosticSeverity, Position, Range};
 use solang::sema::*;
 
 use std::collections::HashMap;
@@ -25,12 +27,19 @@ use solang::sema::tags::*;
 
 use solang::sema::builtin::get_prototype;
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct Backend {
-    state: Vec<usize>,
+    client: Client,
+    //state: Vec<usize>,
 }
 
 impl Backend {
+    pub fn new(client: Client) -> Self {
+        Self {
+            client,
+        }
+    }
+
     // Calculate the line and coloumn from the Loc offset recieved from the parser
     // Do a linear search till the correct offset location is matched
     fn file_offset_to_line_column(data: &str, loc: usize) -> (usize, usize) {
@@ -167,7 +176,7 @@ impl Backend {
                 }
                 let mut msg = Backend::construct_defs(&_param.ty, ns, fnc_map);
                 msg = format!("{} {}", msg, _param.name);
-                lookup_tbl.push((_param.loc.0 as u64, _param.loc.1 as u64, msg));
+                lookup_tbl.push((_param.loc.1 as u64, _param.loc.2 as u64, msg));
             }
             Statement::If(_locs, _, expr, stat1, stat2) => {
                 Backend::construct_expr(expr, lookup_tbl, symtab, fnc_map, ns);
@@ -241,11 +250,14 @@ impl Backend {
                 event_loc: _,
                 args,
             } => {
+                /*
                 let fnc_ky = format!(
                     "{}{}",
                     &ns.events[*event_no].name, &ns.events[*event_no].signature
                 );
+                */
 
+                /*
                 if fnc_map.contains_key(&fnc_ky) {
                     if let Some(ans) = fnc_map.get(&fnc_ky) {
                         let nm = ans[..].to_string();
@@ -263,6 +275,25 @@ impl Backend {
                         msg2,
                     ));
                 }
+                */
+
+                let evntdcl = &ns.events[*event_no];
+
+                let tag_msg = render(&evntdcl.tags[..]);
+
+                let mut temp_tbl: Vec<(u64, u64, String)> = Vec::new();
+                let mut evnt_msg = format!("{} event {} (", tag_msg, evntdcl.name);
+    
+                for filds in &evntdcl.fields {
+                    Backend::construct_strct(&filds, &mut temp_tbl, ns);
+                }
+                for entries in temp_tbl {
+                    evnt_msg = format!("{} {}, \n\n", evnt_msg, entries.2);
+                }
+    
+                evnt_msg = format!("{} )", evnt_msg);
+                lookup_tbl.push((loc.1 as u64,  (loc.1 + ns.events[*event_no].name.len()) as u64, evnt_msg));
+
                 for arg in args {
                     Backend::construct_expr(arg, lookup_tbl, symtab, fnc_map, ns);
                 }
@@ -590,17 +621,37 @@ impl Backend {
                 signature: _,
                 args: _,
             } => {
-                let fnc_nam = &ns.contracts[*contract_no].functions[*function_no].name;
-                let fnc_sig = &ns.contracts[*contract_no].functions[*function_no].signature;
+                let fnc = &ns.contracts[*contract_no].functions[*function_no];
+                let msg_tg = render(&fnc.tags[..]);
 
-                let fnc_ky = format!("{}{}", fnc_nam, fnc_sig);
+                let fnc_msg_type = Backend::construct_fnc(&fnc.ty);
+                let mut param_msg = format!("{} \n\n {} {}(", msg_tg, fnc_msg_type, fnc.name);
 
-                if fnc_map.contains_key(&fnc_ky) {
-                    if let Some(ans) = fnc_map.get(&fnc_ky) {
-                        let nm = ans[..].to_string();
-                        lookup_tbl.push((loc.1 as u64, loc.2 as u64, nm));
-                    }
+                for parm in &fnc.params {
+                            let msg = format!(
+                                "{}:{}, \n\n",
+                                parm.name,
+                                Backend::construct_defs(&parm.ty, ns, fnc_map)
+                            );
+                            param_msg = format!("{} {}", param_msg, msg);
+                        }
+                
+                
+
+                param_msg = format!("{} ) returns (", param_msg);
+
+                for ret in &fnc.returns {
+                    let msg = format!(
+                        "{}:{}, ",
+                        ret.name,
+                        Backend::construct_defs(&ret.ty, ns, fnc_map)
+                    );
+                    param_msg = format!("{} {}", param_msg, msg);
                 }
+
+                param_msg = format!("{})", param_msg);
+                lookup_tbl.push((loc.1 as u64, loc.2 as u64, param_msg));
+
             }
             ExternalFunctionCall {
                 loc,
@@ -618,39 +669,13 @@ impl Backend {
                 let mut param_msg = format!("{} \n\n {} {}(", msg_tg, fnc_msg_type, fnc.name);
 
                 for parm in &fnc.params {
-                    match parm.ty {
-                        Type::Struct(no) => {
-                            let fnc_ky = ns.structs[no].name.to_string();
-
-                            if fnc_map.contains_key(&fnc_ky) {
-                                if let Some(ans) = fnc_map.get(&fnc_ky) {
-                                    let nm = format!("{} \n\n", ans[..].to_string());
-                                    lookup_tbl.push((parm.loc.1 as u64, (parm.loc.2) as u64, nm));
-                                }
-                            }
-                        }
-
-                        Type::Enum(no) => {
-                            let fnc_ky = ns.enums[no].name.to_string();
-
-                            if fnc_map.contains_key(&fnc_ky) {
-                                if let Some(ans) = fnc_map.get(&fnc_ky) {
-                                    let nm = format!("{} \n\n", ans[..].to_string());
-                                    lookup_tbl.push((parm.loc.1 as u64, (parm.loc.2) as u64, nm));
-                                }
-                            }
-                        }
-
-                        _ => {
-                            let msg = format!(
-                                "{}:{}, \n\n",
-                                parm.name,
-                                Backend::construct_defs(&parm.ty, ns, fnc_map)
-                            );
-                            param_msg = format!("{} {}", param_msg, msg);
-                        }
+                        let msg = format!(
+                            "{}:{}, \n\n",
+                            parm.name,
+                            Backend::construct_defs(&parm.ty, ns, fnc_map)
+                        );
+                        param_msg = format!("{} {}", param_msg, msg);
                     }
-                }
 
                 param_msg = format!("{} ) \n\n returns (", param_msg);
 
@@ -675,8 +700,8 @@ impl Backend {
                 Backend::construct_expr(gas, lookup_tbl, symtab, fnc_map, ns);
             }
             ExternalFunctionCallRaw {
-                loc: _,
-                ty: _,
+                loc:_,
+                ty:_,
                 address,
                 args,
                 value,
@@ -780,36 +805,12 @@ impl Backend {
         lookup_tbl: &mut Vec<(u64, u64, String)>,
         fnc_map: &mut HashMap<String, String>,
     ) {
-        for evntdcl in &ns.events {
-            let tag_msg = render(&evntdcl.tags[..]);
-
-            let mut temp_tbl: Vec<(u64, u64, String)> = Vec::new();
-            let mut evnt_msg = format!("{} event {} (", tag_msg, evntdcl.name);
-
-            for filds in &evntdcl.fields {
-                Backend::construct_strct(&filds, &mut temp_tbl, ns);
-            }
-            for entries in temp_tbl {
-                evnt_msg = format!("{} {}, \n\n", evnt_msg, entries.2);
-            }
-
-            evnt_msg = format!("{} )", evnt_msg);
-            let ky = format!("{}{}", evntdcl.name, evntdcl.signature);
-            fnc_map.insert(ky, evnt_msg);
-        }
-
         for enm in &ns.enums {
-            let tag_msg = render(&enm.tags[..]);
-
-            let mut evnt_msg = format!("{} enum {} `{{` \n\n", tag_msg, enm.name);
 
             for (nam, vals) in &enm.values {
-                evnt_msg = format!("{} {} {}, \n\n", evnt_msg, nam, vals.1);
+                let evnt_msg = format!("{} {}, \n\n", nam, vals.1);
+                lookup_tbl.push((vals.0.1 as u64, vals.0.2 as u64, evnt_msg));
             }
-
-            evnt_msg = format!("{} \n\n`}}`", evnt_msg);
-            let ky = enm.name.to_string();
-            fnc_map.insert(ky, evnt_msg);
 
             let msg_tg = render(&enm.tags[..]);
             lookup_tbl.push((
@@ -819,22 +820,8 @@ impl Backend {
             ));
         }
 
+        
         for strct in &ns.structs {
-            let tag_msg = render(&strct.tags[..]);
-
-            let mut temp_tbl: Vec<(u64, u64, String)> = Vec::new();
-            let mut evnt_msg = format!("{} struct {} `{{` \n\n", tag_msg, strct.name);
-
-            for filds in &strct.fields {
-                Backend::construct_strct(&filds, &mut temp_tbl, ns);
-            }
-            for entries in temp_tbl {
-                evnt_msg = format!("{} {}, \n\n", evnt_msg, entries.2);
-            }
-
-            evnt_msg = format!("{} \n\n`}}`", evnt_msg);
-            let ky = strct.name.to_string();
-            fnc_map.insert(ky, evnt_msg);
 
             for filds in &strct.fields {
                 Backend::construct_strct(&filds, lookup_tbl, ns);
@@ -857,60 +844,15 @@ impl Backend {
             ));
 
             for fnc in &contrct.functions {
-                let msg_tg = render(&fnc.tags[..]);
-
-                let fnc_msg_type = Backend::construct_fnc(&fnc.ty);
-                let mut param_msg = format!("{} \n\n {} {}(", msg_tg, fnc_msg_type, fnc.name);
-
                 for parm in &fnc.params {
-                    match parm.ty {
-                        Type::Struct(no) => {
-                            let fnc_ky = ns.structs[no].name.to_string();
-
-                            if fnc_map.contains_key(&fnc_ky) {
-                                if let Some(ans) = fnc_map.get(&fnc_ky) {
-                                    let nm = ans[..].to_string();
-                                    lookup_tbl.push((parm.loc.1 as u64, (parm.loc.2) as u64, nm));
-                                }
-                            }
-                        }
-
-                        Type::Enum(no) => {
-                            let fnc_ky = ns.enums[no].name.to_string();
-
-                            if fnc_map.contains_key(&fnc_ky) {
-                                if let Some(ans) = fnc_map.get(&fnc_ky) {
-                                    let nm = ans[..].to_string();
-                                    lookup_tbl.push((parm.loc.1 as u64, (parm.loc.2) as u64, nm));
-                                }
-                            }
-                        }
-
-                        _ => {
-                            let msg = format!(
-                                "{}:{}, \n\n",
-                                parm.name,
-                                Backend::construct_defs(&parm.ty, ns, fnc_map)
-                            );
-                            param_msg = format!("{} {}", param_msg, msg);
-                        }
-                    }
+                    let msg = Backend::construct_defs(&parm.ty, ns, fnc_map);
+                    lookup_tbl.push((parm.loc.1 as u64, parm.loc.2 as u64, msg));
                 }
-
-                param_msg = format!("{} ) returns (", param_msg);
 
                 for ret in &fnc.returns {
-                    let msg = format!(
-                        "{}:{}, ",
-                        ret.name,
-                        Backend::construct_defs(&ret.ty, ns, fnc_map)
-                    );
-                    param_msg = format!("{} {}", param_msg, msg);
+                    let msg = Backend::construct_defs(&ret.ty, ns, fnc_map);
+                    lookup_tbl.push((ret.loc.1 as u64, ret.loc.2 as u64, msg));
                 }
-
-                param_msg = format!("{})", param_msg);
-                let fnc_sig = format!("{}{}", fnc.name, fnc.signature);
-                fnc_map.insert(fnc_sig, param_msg);
 
                 for stmt in &fnc.body {
                     Backend::construct_stmt(&stmt, lookup_tbl, &fnc.symtable, fnc_map, ns);
@@ -948,7 +890,7 @@ impl Backend {
         ns: &ast::Namespace,
         _fnc_map: &HashMap<String, String>,
     ) -> String {
-        let mut def = "[Def]".to_string();
+        let def;
 
         match typ {
             sema::ast::Type::Ref(r) => {
@@ -977,24 +919,35 @@ impl Backend {
                 );
             }
             sema::ast::Type::Struct(n) => {
-                let fnc_ky = &ns.structs[*n].name;
+                let strct= &ns.structs[*n];
 
-                if _fnc_map.contains_key(fnc_ky) {
-                    if let Some(ans) = _fnc_map.get(fnc_ky) {
-                        def = ans[..].to_string();
-                    }
-                } else {
-                    def = typ.to_string(ns);
+                let tag_msg = render(&strct.tags[..]);
+
+                let mut temp_tbl: Vec<(u64, u64, String)> = Vec::new();
+                let mut evnt_msg = format!("{} struct {} `{{` \n\n", tag_msg, strct.name);
+    
+                for filds in &strct.fields {
+                    Backend::construct_strct(&filds, &mut temp_tbl, ns);
                 }
+                for entries in temp_tbl {
+                    evnt_msg = format!("{} {}, \n\n", evnt_msg, entries.2);
+                }
+    
+                evnt_msg = format!("{} \n\n`}}`", evnt_msg);
+                def = evnt_msg;
             }
             sema::ast::Type::Enum(n) => {
-                let fnc_ky = &ns.enums[*n].name;
+                let enm = &ns.enums[*n];
 
-                if _fnc_map.contains_key(fnc_ky) {
-                    if let Some(ans) = _fnc_map.get(fnc_ky) {
-                        def = ans[..].to_string();
-                    }
+                let tag_msg = render(&enm.tags[..]);
+
+                let mut evnt_msg = format!("{} enum {} `{{` \n\n", tag_msg, enm.name);
+    
+                for (nam, vals) in &enm.values {
+                    evnt_msg = format!("{} {} {}, \n\n", evnt_msg, nam, vals.1);
                 }
+    
+                def = format!("{} \n\n`}}`", evnt_msg);
             }
             _ => {
                 def = typ.to_string(ns);
@@ -1030,24 +983,31 @@ impl Backend {
         mut lookup_tbl: Vec<(u64, u64, String)>,
         _fnc_map: &HashMap<String, String>,
     ) -> String {
-        let res; // = format!("[Hover]");
-        let mut ind = 0;
+        //let mut res = format!("[Hover]");
+        let mut res = format!(
+            "Either the code is incorrect or Feature not yet implemented for {} offset \n\n",
+            offset
+        );
+ 
+        let mut _ind = 0;
         let mut _found = false;
 
         lookup_tbl.sort_by_key(|k| k.0);
+        lookup_tbl.reverse();
 
-        for x in 0..lookup_tbl.len() - 1 {
-            if lookup_tbl[x].0 == 0 {
-                ind += 1;
-                continue;
-            }
+        for x in 0..lookup_tbl.len() {
             if lookup_tbl[x].0 <= *offset && *offset <= lookup_tbl[x].1 {
+                res = lookup_tbl[_ind].2.to_string();                
+                break;
+            }
+                _ind +=1;
+                /*
                 _found = true;
                 if x < lookup_tbl.len() - 1 {
                     if *offset < lookup_tbl[x + 1].0 {
                         break;
                     } else {
-                        ind += 1;
+                        _ind += 1;
                         continue;
                     }
                 } else {
@@ -1056,28 +1016,48 @@ impl Backend {
             } else {
                 _found = false;
             }
-            ind += 1;
-        }
+            _ind += 1;
+            */
 
+            /*
+            let mut msg1 = format!("l:{} r:{} msg:{} \n\n", lookup_tbl[x].0, lookup_tbl[x].1, lookup_tbl[x].2.to_string());
+            msg1 = msg1.to_owned();
+            res.push_str(&msg1);
+            */
+        }
+        
+        /*
+        let mut samp = format!("fncmap \n\n");
+        samp = samp.to_owned();
+        res.push_str(&samp);
+        for fnc in _fnc_map {
+            let mut samp1 = format!("sig:{} msg:{} \n\n", fnc.0, fnc.1);
+            samp1 = samp1.to_owned();
+            res.push_str(&samp1);
+        }
+        */
+ 
+        /*
         if !_found {
             res = format!("");
         } else {
             res = lookup_tbl[ind].2.to_string();
         }
+        */
         res
     }
 }
 
 #[tower_lsp::async_trait]
 impl LanguageServer for Backend {
-    async fn initialize(&self, _: &Client, _: InitializeParams) -> Result<InitializeResult> {
+    async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
         Ok(InitializeResult {
             server_info: None,
             capabilities: ServerCapabilities {
                 text_document_sync: Some(TextDocumentSyncCapability::Kind(
-                    TextDocumentSyncKind::Incremental,
+                    TextDocumentSyncKind::Full,
                 )),
-                hover_provider: Some(true),
+                hover_provider: Some(HoverProviderCapability::Simple(true)),
                 completion_provider: Some(CompletionOptions {
                     resolve_provider: Some(false),
                     trigger_characters: Some(vec![".".to_string()]),
@@ -1088,7 +1068,9 @@ impl LanguageServer for Backend {
                     retrigger_characters: None,
                     work_done_progress_options: Default::default(),
                 }),
-                document_highlight_provider: Some(true),
+                document_highlight_provider: None,
+                selection_range_provider: None,
+                folding_range_provider: None,
                 workspace_symbol_provider: Some(true),
                 execute_command_provider: Some(ExecuteCommandOptions {
                     commands: vec!["dummy.do_something".to_string()],
@@ -1107,8 +1089,8 @@ impl LanguageServer for Backend {
         })
     }
 
-    async fn initialized(&self, client: &Client, _: InitializedParams) {
-        client.log_message(MessageType::Info, "server initialized!");
+    async fn initialized(&self, _: InitializedParams) {
+        self.client.log_message(MessageType::Info, "server initialized!").await;
     }
 
     async fn shutdown(&self) -> Result<()> {
@@ -1117,31 +1099,29 @@ impl LanguageServer for Backend {
 
     async fn did_change_workspace_folders(
         &self,
-        client: &Client,
         _: DidChangeWorkspaceFoldersParams,
     ) {
-        client.log_message(MessageType::Info, "workspace folders changed!");
+        self.client.log_message(MessageType::Info, "workspace folders changed!").await;
     }
 
-    async fn did_change_configuration(&self, client: &Client, _: DidChangeConfigurationParams) {
-        client.log_message(MessageType::Info, "configuration changed!");
+    async fn did_change_configuration(&self, _: DidChangeConfigurationParams) {
+        self.client.log_message(MessageType::Info, "configuration changed!").await;
     }
 
-    async fn did_change_watched_files(&self, client: &Client, _: DidChangeWatchedFilesParams) {
-        client.log_message(MessageType::Info, "watched files have changed!");
+    async fn did_change_watched_files(&self, _: DidChangeWatchedFilesParams) {
+        self.client.log_message(MessageType::Info, "watched files have changed!").await;
     }
 
     async fn execute_command(
         &self,
-        client: &Client,
         _: ExecuteCommandParams,
     ) -> Result<Option<Value>> {
-        client.log_message(MessageType::Info, "command executed!");
+        self.client.log_message(MessageType::Info, "command executed!").await;
         Ok(None)
     }
 
-    async fn did_open(&self, client: &Client, params: DidOpenTextDocumentParams) {
-        client.log_message(MessageType::Info, "file opened!");
+    async fn did_open(&self, params: DidOpenTextDocumentParams) {
+        //self.client.log_message(MessageType::Info, "file opened!").await;
 
         let uri = params.text_document.uri;
 
@@ -1158,22 +1138,22 @@ impl LanguageServer for Backend {
 
             filecache.add_import_path(p);
 
-            let uri_string = uri.to_string();
+            let _uri_string = uri.to_string();
 
-            client.log_message(MessageType::Info, &uri_string);
+            //self.client.log_message(MessageType::Info, &uri_string);
 
             let os_str = path.file_name().unwrap();
 
             let ns = parse_and_resolve(os_str.to_str().unwrap(), &mut filecache, Target::Ewasm);
 
-            let d = Backend::convert_to_diagnostics(ns, &mut filecache);
+            let _d = Backend::convert_to_diagnostics(ns, &mut filecache);
 
-            client.publish_diagnostics(uri, d, None);
+            //self.client.publish_diagnostics(uri, d, None).await;
         }
     }
 
-    async fn did_change(&self, client: &Client, params: DidChangeTextDocumentParams) {
-        client.log_message(MessageType::Info, "file changed!");
+    async fn did_change(&self, params: DidChangeTextDocumentParams) {
+        //self.client.log_message(MessageType::Info, "file changed!");
 
         let uri = params.text_document.uri;
 
@@ -1190,22 +1170,22 @@ impl LanguageServer for Backend {
 
             filecache.add_import_path(p);
 
-            let uri_string = uri.to_string();
+            //let uri_string = uri.to_string();
 
-            client.log_message(MessageType::Info, &uri_string);
+            //self.client.log_message(MessageType::Info, &uri_string);
 
             let os_str = path.file_name().unwrap();
 
             let ns = parse_and_resolve(os_str.to_str().unwrap(), &mut filecache, Target::Ewasm);
 
-            let d = Backend::convert_to_diagnostics(ns, &mut filecache);
+            let _d = Backend::convert_to_diagnostics(ns, &mut filecache);
 
-            client.publish_diagnostics(uri, d, None);
+            //self.client.publish_diagnostics(uri, d, None);
         }
     }
 
-    async fn did_save(&self, client: &Client, params: DidSaveTextDocumentParams) {
-        client.log_message(MessageType::Info, "file saved!");
+    async fn did_save(&self, params: DidSaveTextDocumentParams) {
+        //self.client.log_message(MessageType::Info, "file saved!");
 
         let uri = params.text_document.uri;
 
@@ -1222,22 +1202,22 @@ impl LanguageServer for Backend {
 
             filecache.add_import_path(p);
 
-            let uri_string = uri.to_string();
+            let _uri_string = uri.to_string();
 
-            client.log_message(MessageType::Info, &uri_string);
+            //self.client.log_message(MessageType::Info, &uri_string);
 
             let os_str = path.file_name().unwrap();
 
             let ns = parse_and_resolve(os_str.to_str().unwrap(), &mut filecache, Target::Ewasm);
 
-            let d = Backend::convert_to_diagnostics(ns, &mut filecache);
+            let _d = Backend::convert_to_diagnostics(ns, &mut filecache);
 
-            client.publish_diagnostics(uri, d, None);
+            //self.client.publish_diagnostics(uri, d, None);
         }
     }
 
-    async fn did_close(&self, client: &Client, _: DidCloseTextDocumentParams) {
-        client.log_message(MessageType::Info, "file closed!");
+    async fn did_close(&self, _: DidCloseTextDocumentParams) {
+        self.client.log_message(MessageType::Info, "file closed!").await;
     }
 
     async fn completion(&self, _: CompletionParams) -> Result<Option<CompletionResponse>> {
